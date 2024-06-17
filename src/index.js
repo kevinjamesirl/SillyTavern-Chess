@@ -1,31 +1,9 @@
-/* global SillyTavern */
-
-import { Chess } from 'chess.js';
-import { CHESSPIECES } from './pieces';
-import '@chrisoakman/chessboardjs/dist/chessboard-1.0.0.min.css';
-import '@chrisoakman/chessboardjs/dist/chessboard-1.0.0.min';
-import './styles.css';
-
-/**
- * Hacky way to import a module from an ST script file.
- * @param {string} what Name of the exported member to import
- * @returns {Promise<any>} The imported member
- */
-async function importFromScript(what) {
-    const module = await import(/* webpackIgnore: true */'../../../../../script.js');
-    return module[what];
-}
-
-/**
- * @type {(prompt: string, api: string, instructOverride: boolean, quietToLoud: boolean, systemPrompt: string, responseLength: number) => Promise<string>}
- */
-const generateRaw = await importFromScript('generateRaw');
-
 class ChessGame {
     static gamesLaunched = 0;
 
     static opponentMovePrompt = "You are a world-renowned chess grandmaster. You are given the representation of a chessboard state using the Forsyth-Edwards Notation (FEN) and ASCII. Select the best possible move from the list in algebraic notation and reply with JUST the move, e.g. 'Nc6'. You are playing as {{color}}.";
     static commentPrompt = "{{char}} played a game of chess against {{user}}. {{user}} played as {{color}} and {{char}} played as {{opponent}}, and {{outcome}}! The final state of the board state in FEN notation: {{fen}}. Write a {{random:witty,playful,funny,quirky,zesty}} comment about the game from {{char}}'s perspective.";
+    static quipPrompt = "You are a witty and playful chess grandmaster. The current board state is given in FEN and ASCII, and the user's last move is '{{move}}'. Provide a witty quip or playful comment in response to the user's move.";
 
     constructor(color) {
         if (color === 'random') {
@@ -49,17 +27,13 @@ class ChessGame {
     getOutcome() {
         if (this.game.isCheckmate()) {
             return `${this.game.turn() === 'w' ? 'Black' : 'White'} wins by checkmate`;
-        }
-        else if (this.game.isStalemate()) {
+        } else if (this.game.isStalemate()) {
             return 'the game is a stalemate';
-        }
-        else if (this.game.isDraw()) {
+        } else if (this.game.isDraw()) {
             return 'the game is a draw';
-        }
-        else if (this.game.isThreefoldRepetition()) {
+        } else if (this.game.isThreefoldRepetition()) {
             return 'the game is a threefold repetition';
-        }
-        else {
+        } else {
             return 'the game was inconclusive';
         }
     }
@@ -162,6 +136,30 @@ class ChessGame {
         }
     }
 
+    async generateQuip(move) {
+        const fen = this.game.fen();
+        const ascii = this.game.ascii();
+        const quipPromptText = ChessGame.quipPrompt.replace('{{move}}', move);
+        const prompt = [fen, ascii, quipPromptText].join('\n\n');
+        try {
+            const quip = await generateRaw(prompt, '', false, false, quipPromptText);
+            this.updateChatWithQuip(quip);
+        } catch (error) {
+            console.error('Failed to generate a quip', error);
+        }
+    }
+
+    updateChatWithQuip(quip) {
+        const context = SillyTavern.getContext();
+        const message = {
+            mes: quip,
+            id: `quip-${Math.random().toString(36).substring(2)}`,
+            user: false,
+        };
+        context.chat.push(message);
+        context.sendSystemMessage('generic', message.mes);
+    }
+
     removeGraySquares() {
         document.querySelectorAll(`#${this.boardId} .square-55d63`).forEach((element) => {
             element.classList.remove('gray');
@@ -187,7 +185,7 @@ class ChessGame {
         }
     }
 
-    onDrop(source, target) {
+    async onDrop(source, target) {
         this.removeGraySquares();
 
         // see if the move is legal
@@ -202,7 +200,8 @@ class ChessGame {
             this.board.position(this.game.fen());
 
             this.updateStatus();
-            this.tryMoveOpponent();
+            await this.generateQuip(`${source}-${target}`);
+            await this.tryMoveOpponent();
         } catch {
             // illegal move
             return 'snapback';
@@ -259,33 +258,25 @@ class ChessGame {
     updateStatus() {
         if (this.game.isGameOver()) {
             this.opponentStatusText.textContent = 'Game over. Press ✕ to close';
-        }
-        else if (this.isOpponentTurn()) {
+        } else if (this.isOpponentTurn()) {
             this.opponentStatusText.textContent = 'Thinking...';
-        }
-        else if (this.isUserTurn()) {
+        } else if (this.isUserTurn()) {
             this.opponentStatusText.textContent = 'Your turn!';
-        }
-        else {
+        } else {
             this.opponentStatusText.textContent = '';
         }
 
         if (this.game.isCheckmate()) {
             this.userStatusText.textContent = `Checkmate! ${this.game.turn() === 'w' ? 'Black' : 'White'} wins`;
-        }
-        else if (this.game.inCheck()) {
+        } else if (this.game.inCheck()) {
             this.userStatusText.textContent = `${this.game.turn() === 'w' ? 'White' : 'Black'} is in check`;
-        }
-        else if (this.game.isStalemate()) {
+        } else if (this.game.isStalemate()) {
             this.userStatusText.textContent = 'Game is a stalemate';
-        }
-        else if (this.game.isDraw()) {
+        } else if (this.game.isDraw()) {
             this.userStatusText.textContent = 'Game is a draw';
-        }
-        else if (this.game.isThreefoldRepetition()) {
+        } else if (this.game.isThreefoldRepetition()) {
             this.userStatusText.textContent = 'Game is a threefold repetition';
-        }
-        else {
+        } else {
             this.userStatusText.textContent = '';
         }
     }
