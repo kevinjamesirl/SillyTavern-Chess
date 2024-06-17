@@ -261,7 +261,7 @@ class ChessGame {
         } else if (this.isOpponentTurn()) {
             this.opponentStatusText.textContent = 'Thinking...';
         } else if (this.isUserTurn()) {
-            this.opponentStatusText.textContent = 'Your turn!';
+            this.opponentStatusText.textContent = 'Your turn dog!';
         } else {
             this.opponentStatusText.textContent = '';
         }
